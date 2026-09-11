@@ -37,7 +37,7 @@ GALILEAN_MOONS = {
 # iotime application settings
 # ---------------------------------------------------------------------
 
-IOTIME_VERSION = "1.1.0"
+IOTIME_VERSION = "1.1.2"
 
 CACHE_DIR = (
     Path.home()
@@ -139,6 +139,12 @@ def event_style(text):
     Color upcoming astronomical event descriptions.
     """
     lowered = text.lower()
+
+    if (
+        "eclipse" in lowered
+        or "totality" in lowered
+    ):
+        return ansi(text, "1;31")
 
     if (
         "sunrise" in lowered
@@ -943,7 +949,200 @@ def show_current(reference_time=None):
 # Display next eclipse
 # ---------------------------------------------------------------------
 
+def get_eclipse_event(reference_time=None):
+    """
+    Retrieve the current or next visible Jovian eclipse.
+
+    Live queries use the short-lived eclipse cache. Historical
+    reference times always bypass the cache.
+    """
+    if reference_time is not None:
+        return find_next_eclipse(
+            reference_time
+        )
+
+    cache_key = "next-eclipse-event"
+
+    cached = cache_load(
+        cache_key,
+        ECLIPSE_CACHE_TTL,
+    )
+
+    if cached is not None:
+        return cached
+
+    event = find_next_eclipse()
+
+    cache_store(
+        cache_key,
+        event,
+    )
+
+    return event
+
+
+def eclipse_phase_at(event, moment):
+    """
+    Return the eclipse state at a particular moment.
+
+    Returns:
+        TOTAL JOVIAN ECLIPSE
+        PARTIAL JOVIAN ECLIPSE
+        None
+    """
+    if event is None:
+        return None
+
+    if not (
+        event["begin"]
+        <= moment
+        <= event["end"]
+    ):
+        return None
+
+    if (
+        event["total_begin"] is not None
+        and event["total_end"] is not None
+        and event["total_begin"]
+        <= moment
+        <= event["total_end"]
+    ):
+        return "TOTAL JOVIAN ECLIPSE"
+
+    return "PARTIAL JOVIAN ECLIPSE"
+
+
+def eclipse_heading(event, moment):
+    """
+    Choose CURRENT or NEXT depending on whether the eclipse
+    is already underway.
+    """
+    if (
+        event is not None
+        and event["begin"]
+        <= moment
+        <= event["end"]
+    ):
+        return "CURRENT JOVIAN ECLIPSE"
+
+    return "NEXT JOVIAN ECLIPSE"
+
+
+def print_eclipse_report(event, moment):
+    """
+    Print an eclipse report suitable for both --next and
+    the unified --forecast display.
+    """
+    if event is None:
+        print(
+            ansi(
+                "No visible Jovian eclipse found "
+                "within the next 48 hours.",
+                "2",
+            )
+        )
+        return
+
+    active = (
+        event["begin"]
+        <= moment
+        <= event["end"]
+    )
+
+    begin_label = (
+        "Began"
+        if active
+        else "Begins"
+    )
+
+    print(
+        ansi(
+            f"{begin_label:<23}"
+            f"{format_nst(event['begin'])}",
+            "1;36",
+        )
+    )
+
+    if event["total_begin"]:
+        total_begin_label = (
+            "Totality began"
+            if moment >= event["total_begin"]
+            else "Totality begins"
+        )
+
+        print(
+            ansi(
+                f"{total_begin_label:<23}"
+                f"{format_nst(event['total_begin'])}",
+                "1;33",
+            )
+        )
+
+    print(
+        ansi(
+            f"{'Maximum':<23}"
+            f"{format_nst(event['maximum'])}",
+            "1;35",
+        )
+    )
+
+    if event["total_end"]:
+        total_end_label = (
+            "Totality ended"
+            if moment > event["total_end"]
+            else "Totality ends"
+        )
+
+        print(
+            ansi(
+                f"{total_end_label:<23}"
+                f"{format_nst(event['total_end'])}",
+                "1;33",
+            )
+        )
+
+    end_label = (
+        "Ends"
+        if moment <= event["end"]
+        else "Ended"
+    )
+
+    print(
+        ansi(
+            f"{end_label:<23}"
+            f"{format_nst(event['end'])}",
+            "1;36",
+        )
+    )
+
+    if active:
+        print(
+            f"{'Remaining':<23}"
+            f"{format_time_until(event['end'], moment)}"
+        )
+
+    print(
+        f"{'Duration':<23}"
+        f"{format_duration(event['begin'], event['end'])}"
+    )
+
+    print(
+        f"{'Minimum separation':<23}"
+        f"{event['minimum_separation']:.3f}°"
+    )
+
+
 def show_next_eclipse(reference_time=None):
+    now = (
+        reference_time
+        if reference_time is not None
+        else datetime.now(timezone.utc)
+    )
+
+    event = get_eclipse_event(
+        reference_time
+    )
+
     print()
     print(
         heading("NEXUS CITY · IO")
@@ -953,78 +1152,18 @@ def show_next_eclipse(reference_time=None):
 
     print(
         section_heading(
-            "NEXT JOVIAN ECLIPSE"
+            eclipse_heading(
+                event,
+                now,
+            )
         )
     )
 
     print()
 
-    event = find_next_eclipse(
-        reference_time
-    )
-
-    if event is None:
-        print(
-            ansi(
-                "No visible Jovian eclipse found "
-                "within the next 48 hours.",
-                "2",
-            )
-        )
-
-        print()
-        return
-
-    print(
-        ansi(
-            f"Begins                 "
-            f"{format_nst(event['begin'])}",
-            "1;36",
-        )
-    )
-
-    if event["total_begin"]:
-        print(
-            ansi(
-                f"Totality begins        "
-                f"{format_nst(event['total_begin'])}",
-                "1;33",
-            )
-        )
-
-    print(
-        ansi(
-            f"Maximum                "
-            f"{format_nst(event['maximum'])}",
-            "1;35",
-        )
-    )
-
-    if event["total_end"]:
-        print(
-            ansi(
-                f"Totality ends          "
-                f"{format_nst(event['total_end'])}",
-                "1;33",
-            )
-        )
-
-    print(
-        ansi(
-            f"Ends                   "
-            f"{format_nst(event['end'])}",
-            "1;36",
-        )
-    )
-
-    print(
-        f"Duration               "
-        f"{format_duration(event['begin'], event['end'])}"
-    )
-
-    print(
-        f"Minimum separation     "
-        f"{event['minimum_separation']:.3f}°"
+    print_eclipse_report(
+        event,
+        now,
     )
 
     print()
@@ -1745,6 +1884,18 @@ def show_solar_forecast(reference_time=None):
         current_el
     )
 
+    eclipse_event = get_eclipse_event(
+        reference_time
+    )
+
+    eclipse_phase = eclipse_phase_at(
+        eclipse_event,
+        now,
+    )
+
+    if eclipse_phase:
+        current_state = eclipse_phase
+
     print()
     print(
         heading("NEXUS CITY · IO")
@@ -1762,13 +1913,83 @@ def show_solar_forecast(reference_time=None):
 
     print(
         f"{'Current':<24}"
-        f"{light_state_style(current_state)}"
+        f"{condition_style(current_state)}"
     )
 
     print(
         f"{'Sun':<24}"
         f"{current_el:+.2f}° · {trend}"
     )
+
+    if eclipse_phase:
+
+        if (
+            eclipse_phase == "TOTAL JOVIAN ECLIPSE"
+            and eclipse_event["total_end"] is not None
+        ):
+            eclipse_description = (
+                "Totality · ends "
+                f"{eclipse_event['total_end'].strftime('%H:%M NST')} · "
+                "in "
+                f"{format_time_until(eclipse_event['total_end'], now)}"
+            )
+
+            observed_time = eclipse_event["total_end"]
+            observed_description = "Jovian totality ends"
+
+        elif (
+            eclipse_event["total_begin"] is not None
+            and now < eclipse_event["total_begin"]
+        ):
+            eclipse_description = (
+                "Partial · totality begins "
+                f"{eclipse_event['total_begin'].strftime('%H:%M NST')} · "
+                "in "
+                f"{format_time_until(eclipse_event['total_begin'], now)}"
+            )
+
+            observed_time = eclipse_event["total_begin"]
+            observed_description = "Jovian totality begins"
+
+        else:
+            eclipse_description = (
+                "Partial · eclipse ends "
+                f"{eclipse_event['end'].strftime('%H:%M NST')} · "
+                "in "
+                f"{format_time_until(eclipse_event['end'], now)}"
+            )
+
+            observed_time = eclipse_event["end"]
+            observed_description = "Jovian eclipse ends"
+
+        print(
+            f"{'Eclipse':<24}"
+            f"{ansi(eclipse_description, '1;31')}"
+        )
+
+        print()
+
+        print(
+            section_heading(
+                "NEXT OBSERVED LIGHT CHANGE"
+            )
+        )
+
+        print()
+
+        description_field = event_style(
+            f"{observed_description:<30}"
+        )
+
+        print(
+            f"{description_field}"
+            f"{observed_time.strftime('%a %d %b  %H:%M NST')}"
+        )
+
+        print(
+            f"{'Time until':<30}"
+            f"{format_time_until(observed_time, now)}"
+        )
 
     if events:
         next_event = events[0]
@@ -1777,7 +1998,7 @@ def show_solar_forecast(reference_time=None):
 
         print(
             section_heading(
-                "NEXT TRANSITION"
+                "NEXT SOLAR TRANSITION"
             )
         )
 
@@ -2046,9 +2267,21 @@ def show_nexus_forecast(reference_time=None):
         )
     )
 
+    eclipse_event = get_eclipse_event(
+        reference_time
+    )
+
+    eclipse_phase = eclipse_phase_at(
+        eclipse_event,
+        now,
+    )
+
     current_light = solar_state(
         current_sun_el
     )
+
+    if eclipse_phase:
+        current_light = eclipse_phase
 
     print()
     print("NEXUS CITY · IO")
@@ -2089,7 +2322,7 @@ def show_nexus_forecast(reference_time=None):
 
     print(
         f"{'Natural light':<20}"
-        f"{light_state_style(current_light)}"
+        f"{condition_style(current_light)}"
     )
 
     print(
@@ -2098,15 +2331,51 @@ def show_nexus_forecast(reference_time=None):
         f"{sun_trend}"
     )
 
-    if solar_events:
-        next_light = solar_events[0]
+    if eclipse_phase:
+        if (
+            eclipse_phase == "TOTAL JOVIAN ECLIPSE"
+            and eclipse_event["total_end"] is not None
+        ):
+            phase_description = (
+                "Totality · ends "
+                f"{eclipse_event['total_end'].strftime('%H:%M NST')} · "
+                "in "
+                f"{format_time_until(eclipse_event['total_end'], now)}"
+            )
+
+        elif (
+            eclipse_event["total_begin"] is not None
+            and now < eclipse_event["total_begin"]
+        ):
+            phase_description = (
+                "Partial · totality begins "
+                f"{eclipse_event['total_begin'].strftime('%H:%M NST')} · "
+                "in "
+                f"{format_time_until(eclipse_event['total_begin'], now)}"
+            )
+
+        else:
+            phase_description = (
+                "Partial · eclipse ends "
+                f"{eclipse_event['end'].strftime('%H:%M NST')} · "
+                "in "
+                f"{format_time_until(eclipse_event['end'], now)}"
+            )
 
         print(
-            f"{'Next light change':<20}"
-            f"{next_light['description']} · "
-            f"{next_light['time'].strftime('%H:%M NST')} · "
+            f"{'Eclipse':<20}"
+            f"{ansi(phase_description, '1;31')}"
+        )
+
+    if solar_events:
+        next_solar = solar_events[0]
+
+        print(
+            f"{'Next solar change':<20}"
+            f"{next_solar['description']} · "
+            f"{next_solar['time'].strftime('%H:%M NST')} · "
             f"in "
-            f"{format_time_until(next_light['time'], now)}"
+            f"{format_time_until(next_solar['time'], now)}"
         )
 
     print()
@@ -2151,7 +2420,9 @@ def show_nexus_forecast(reference_time=None):
     timeline = []
 
     for event in solar_events:
-        if event["time"] <= cutoff:
+        if (
+            now < event["time"] <= cutoff
+        ):
             timeline.append({
                 "time": event["time"],
                 "description":
@@ -2159,12 +2430,48 @@ def show_nexus_forecast(reference_time=None):
             })
 
     for event in satellite_events:
-        if event["time"] <= cutoff:
+        if (
+            now < event["time"] <= cutoff
+        ):
             timeline.append({
                 "time": event["time"],
                 "description":
                     event["description"],
             })
+
+    if eclipse_event is not None:
+        eclipse_milestones = [
+            (
+                eclipse_event["begin"],
+                "Jovian eclipse begins",
+            ),
+            (
+                eclipse_event["total_begin"],
+                "Jovian totality begins",
+            ),
+            (
+                eclipse_event["maximum"],
+                "Maximum Jovian eclipse",
+            ),
+            (
+                eclipse_event["total_end"],
+                "Jovian totality ends",
+            ),
+            (
+                eclipse_event["end"],
+                "Jovian eclipse ends",
+            ),
+        ]
+
+        for event_time, description in eclipse_milestones:
+            if (
+                event_time is not None
+                and now < event_time <= cutoff
+            ):
+                timeline.append({
+                    "time": event_time,
+                    "description": description,
+                })
 
     timeline.sort(
         key=lambda event: event["time"]
@@ -2179,43 +2486,36 @@ def show_nexus_forecast(reference_time=None):
             )
 
             print(
-                f"{timestamp:<23}"
-                f"{event['description']}"
+                f"{ansi(f'{timestamp:<23}', '2')}"
+                f"{event_style(event['description'])}"
             )
 
     else:
         print(
-            "No solar or Galilean moon events "
+            "No solar, eclipse, or Galilean moon events "
             "during the next 24 hours."
         )
 
     print()
 
     # ---------------------------------------------------------
-    # Next Jovian eclipse
+    # Current / next Jovian eclipse
     # ---------------------------------------------------------
 
     print(
         section_heading(
-            "NEXT JOVIAN ECLIPSE"
+            eclipse_heading(
+                eclipse_event,
+                now,
+            )
         )
     )
     print("─" * 78)
 
-    eclipse_lines = (
-        capture_next_eclipse_report(
-            reference_time
-        )
+    print_eclipse_report(
+        eclipse_event,
+        now,
     )
-
-    if eclipse_lines:
-        for line in eclipse_lines:
-            print(line)
-
-    else:
-        print(
-            "No upcoming eclipse information available."
-        )
 
     print()
 
@@ -2234,7 +2534,6 @@ def show_nexus_forecast(reference_time=None):
     )
 
     print()
-
 
 def main():
     global USE_COLOR

@@ -73,7 +73,7 @@ Europa disappears behind Jupiter
 iotime --sun
 ```
 
-Shows the current natural light state and upcoming:
+Shows the current observed natural light state and upcoming solar transitions:
 
 - astronomical twilight
 - nautical twilight
@@ -81,23 +81,28 @@ Shows the current natural light state and upcoming:
 - sunrise
 - sunset
 
+When a Jovian eclipse is in progress, `--sun` becomes eclipse-aware. It reports the current partial or total eclipse state, shows when the next observed-light change will occur, and separately retains the next ordinary solar transition.
+
 Because Io's natural solar day is much longer than a 24-hour human day, sunrise and sunset can occur at wonderfully strange civil times.
 
 Nexus Standard Time remains a normal 24-hour UTC-based clock.
 
-## Next Jovian eclipse
+## Current or next Jovian eclipse
 
 ```bash
 iotime --next
 ```
 
-Forecasts the next time Jupiter passes between Nexus City and Sol, including:
+Reports the current Jovian eclipse when one is already in progress; otherwise it forecasts the next time Jupiter passes between Nexus City and Sol.
+
+The report includes:
 
 - eclipse beginning
 - beginning of totality
 - maximum eclipse
 - end of totality
 - eclipse end
+- remaining time when an eclipse is active
 - duration
 - minimum angular separation
 
@@ -117,7 +122,8 @@ NEXUS CITY FORECAST
 NOW
 Natural light
 Solar position
-Next light transition
+Eclipse status, when active
+Next solar change
 
 JOVIAN SKY
 Jupiter
@@ -126,11 +132,15 @@ Ganymede
 Callisto
 
 NEXT 24 HOURS
-Solar and Galilean moon events
+Solar, eclipse, and Galilean moon events
 
+CURRENT JOVIAN ECLIPSE
+or
 NEXT JOVIAN ECLIPSE
-Detailed eclipse forecast
+Detailed eclipse report
 ```
+
+During an active eclipse, the unified forecast treats the eclipse as part of the observed natural-light state, includes upcoming eclipse milestones in the 24-hour timeline, and distinguishes eclipse-driven light changes from ordinary solar transitions.
 
 This is the recommended mode for worldbuilding and general use.
 
@@ -215,7 +225,7 @@ iotime --version
 Current release:
 
 ```text
-iotime 1.1.0
+iotime 1.1.2
 ```
 
 ## Astronomy notes
