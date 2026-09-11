@@ -1311,7 +1311,7 @@ def describe_satellite_transition(name, old_state, new_state):
     )
 
 
-def _find_satellite_events_uncached(hours=48):
+def _find_satellite_events_uncached(hours=48, reference_time=None):
     """
     Search the upcoming Jovian sky for state changes involving
     Europa, Ganymede, and Callisto.
@@ -1319,7 +1319,12 @@ def _find_satellite_events_uncached(hours=48):
     Sampling resolution: approximately 2 minutes.
     """
 
-    now = datetime.now(timezone.utc)
+    now = (
+        reference_time
+        if reference_time is not None
+        else datetime.now(timezone.utc)
+    )
+
     stop = now + timedelta(hours=hours)
 
     epochs = {
@@ -1388,11 +1393,17 @@ def _find_satellite_events_uncached(hours=48):
     return events
 
 
-def find_satellite_events(hours=48):
+def find_satellite_events(hours=48, reference_time=None):
     """
     Retrieve upcoming Galilean events, using a short-lived
     local cache to avoid repeating expensive Horizons queries.
     """
+
+    if reference_time is not None:
+        return _find_satellite_events_uncached(
+            hours,
+            reference_time,
+        )
 
     cache_key = (
         f"satellite-events-{hours}h"
@@ -1420,7 +1431,7 @@ def find_satellite_events(hours=48):
     return events
 
 
-def show_satellite_events():
+def show_satellite_events(reference_time=None):
     print()
     print(
         heading("NEXUS CITY · IO")
@@ -1436,7 +1447,9 @@ def show_satellite_events():
 
     print()
 
-    events = find_satellite_events()
+    events = find_satellite_events(
+        reference_time=reference_time
+    )
 
     if not events:
         print(
@@ -2288,7 +2301,6 @@ def main():
         parser.error(str(error))
 
     specialized_mode_requested = any((
-        args.events,
         args.forecast,
     ))
 
@@ -2310,7 +2322,7 @@ def main():
             show_jovian_sky(reference_time)
 
         elif args.events:
-            show_satellite_events()
+            show_satellite_events(reference_time)
 
         elif args.sun:
             show_solar_forecast(reference_time)
