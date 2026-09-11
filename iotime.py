@@ -1593,7 +1593,7 @@ def format_time_until(event_time, now):
     return " ".join(parts)
 
 
-def find_solar_events(hours=60):
+def find_solar_events(hours=60, reference_time=None):
     """
     Search upcoming natural daylight and twilight transitions
     over Nexus City.
@@ -1602,7 +1602,12 @@ def find_solar_events(hours=60):
     complete Io solar day.
     """
 
-    now = datetime.now(timezone.utc)
+    now = (
+        reference_time
+        if reference_time is not None
+        else datetime.now(timezone.utc)
+    )
+
     stop = now + timedelta(hours=hours)
 
     epochs = {
@@ -1707,13 +1712,15 @@ def find_solar_events(hours=60):
     )
 
 
-def show_solar_forecast():
+def show_solar_forecast(reference_time=None):
     (
         now,
         current_el,
         trend,
         events,
-    ) = find_solar_events()
+    ) = find_solar_events(
+        reference_time=reference_time
+    )
 
     current_state = solar_state(
         current_el
@@ -2277,7 +2284,6 @@ def main():
     specialized_mode_requested = any((
         args.next,
         args.events,
-        args.sun,
         args.forecast,
     ))
 
@@ -2302,7 +2308,7 @@ def main():
             show_satellite_events()
 
         elif args.sun:
-            show_solar_forecast()
+            show_solar_forecast(reference_time)
 
         elif args.forecast:
             show_nexus_forecast()
