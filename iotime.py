@@ -533,12 +533,16 @@ def get_sky(reference_time=None):
             float(jupiter_now["elong"]),
     }
 
-def get_jovian_sky():
+def get_jovian_sky(reference_time=None):
     """
     Retrieve the current apparent positions and visibility
     states of Jupiter, Europa, Ganymede, and Callisto.
     """
-    now = datetime.now(timezone.utc)
+    now = (
+        reference_time
+        if reference_time is not None
+        else datetime.now(timezone.utc)
+    )
     now_jd = Time(now).jd
 
     bodies = []
@@ -1028,8 +1032,8 @@ def show_next_eclipse():
 
     print()
 
-def show_jovian_sky():
-    now, bodies = get_jovian_sky()
+def show_jovian_sky(reference_time=None):
+    now, bodies = get_jovian_sky(reference_time)
 
     nst = now.strftime(
         "%A, %d %B %Y  %H:%M:%S NST"
@@ -2272,7 +2276,6 @@ def main():
 
     specialized_mode_requested = any((
         args.next,
-        args.sky,
         args.events,
         args.sun,
         args.forecast,
@@ -2293,7 +2296,7 @@ def main():
             show_next_eclipse()
 
         elif args.sky:
-            show_jovian_sky()
+            show_jovian_sky(reference_time)
 
         elif args.events:
             show_satellite_events()
