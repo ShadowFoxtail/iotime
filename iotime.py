@@ -432,8 +432,52 @@ def elevation_description(elevation):
     return "near overhead"
 
 
-def get_sky():
-    now = datetime.now(timezone.utc)
+def parse_nst_timestamp(value):
+    """
+    Parse a Nexus Standard Time timestamp.
+
+    NST is numerically identical to UTC.
+
+    Accepted forms:
+        YYYY-MM-DDTHH:MM
+        YYYY-MM-DDTHH:MM:SS
+    """
+    if value is None:
+        return None
+
+    formats = (
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%dT%H:%M:%S",
+    )
+
+    for fmt in formats:
+        try:
+            parsed = datetime.strptime(
+                value,
+                fmt,
+            )
+
+            return parsed.replace(
+                tzinfo=timezone.utc
+            )
+
+        except ValueError:
+            pass
+
+    raise ValueError(
+        "Invalid NST timestamp. "
+        "Use YYYY-MM-DDTHH:MM "
+        "or YYYY-MM-DDTHH:MM:SS."
+    )
+
+
+def get_sky(reference_time=None):
+    now = (
+        reference_time
+        if reference_time is not None
+        else datetime.now(timezone.utc)
+    )
+
     later = now + timedelta(minutes=30)
 
     now_jd = Time(now).jd
@@ -771,8 +815,8 @@ def format_duration(start, end):
 # Display current sky
 # ---------------------------------------------------------------------
 
-def show_current():
-    sky = get_sky()
+def show_current(reference_time=None):
+    sky = get_sky(reference_time)
 
     phase = jupiter_phase(
         sky["jupiter_illumination"],
@@ -2150,6 +2194,15 @@ def main():
         )
     )
 
+    parser.add_argument(
+        "timestamp",
+        nargs="?",
+        help=(
+            "show conditions at an NST timestamp "
+            "(YYYY-MM-DDTHH:MM[:SS])"
+        ),
+    )
+
     mode = parser.add_mutually_exclusive_group()
 
     mode.add_argument(
@@ -2210,6 +2263,32 @@ def main():
     CACHE_BYPASS = args.refresh
 
     try:
+        reference_time = parse_nst_timestamp(
+            args.timestamp
+        )
+
+    except ValueError as error:
+        parser.error(str(error))
+
+    specialized_mode_requested = any((
+        args.next,
+        args.sky,
+        args.events,
+        args.sun,
+        args.forecast,
+    ))
+
+    if (
+        reference_time is not None
+        and specialized_mode_requested
+    ):
+        parser.error(
+            "historical timestamps currently work "
+            "with the default display only; "
+            "additional modes are coming in v1.1"
+        )
+
+    try:
         if args.next:
             show_next_eclipse()
 
@@ -2226,7 +2305,7 @@ def main():
             show_nexus_forecast()
 
         else:
-            show_current()
+            show_current(reference_time)
 
     except Exception as error:
         print(
