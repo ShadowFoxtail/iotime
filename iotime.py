@@ -612,16 +612,20 @@ def jd_to_datetime(jd):
     ).to_datetime(timezone=timezone.utc)
 
 
-def find_next_eclipse():
+def find_next_eclipse(reference_time=None):
     """
-    Search from three hours before now through 48 hours ahead.
+    Search from three hours before the reference time through 48 hours ahead.
 
     The small look-back allows this to correctly identify the beginning
     of an eclipse if iotime is run while one is already in progress.
 
     The search is sampled at one-minute intervals.
     """
-    now = datetime.now(timezone.utc)
+    now = (
+        reference_time
+        if reference_time is not None
+        else datetime.now(timezone.utc)
+    )
 
     start = now - timedelta(hours=3)
     stop = now + timedelta(hours=48)
@@ -939,7 +943,7 @@ def show_current(reference_time=None):
 # Display next eclipse
 # ---------------------------------------------------------------------
 
-def show_next_eclipse():
+def show_next_eclipse(reference_time=None):
     print()
     print(
         heading("NEXUS CITY · IO")
@@ -955,7 +959,9 @@ def show_next_eclipse():
 
     print()
 
-    event = find_next_eclipse()
+    event = find_next_eclipse(
+        reference_time
+    )
 
     if event is None:
         print(
@@ -2282,7 +2288,6 @@ def main():
         parser.error(str(error))
 
     specialized_mode_requested = any((
-        args.next,
         args.events,
         args.forecast,
     ))
@@ -2299,7 +2304,7 @@ def main():
 
     try:
         if args.next:
-            show_next_eclipse()
+            show_next_eclipse(reference_time)
 
         elif args.sky:
             show_jovian_sky(reference_time)
