@@ -37,7 +37,7 @@ GALILEAN_MOONS = {
 # iotime application settings
 # ---------------------------------------------------------------------
 
-IOTIME_VERSION = "1.0.0"
+IOTIME_VERSION = "1.0.1"
 
 CACHE_DIR = (
     Path.home()
@@ -90,6 +90,82 @@ def light_state_style(state):
         return ansi(state, "1;34")
 
     return state
+
+
+def condition_style(state):
+    """
+    Color natural light states and Jovian eclipses.
+    """
+    if "ECLIPSE" in state:
+        return ansi(state, "1;31")
+
+    return light_state_style(state)
+
+
+def status_style(text, status):
+    """
+    Color a satellite visibility/status field while preserving
+    any padding already present in text.
+    """
+    if status == "VISIBLE":
+        code = "1;32"
+
+    elif status == "BELOW HORIZON":
+        code = "2"
+
+    elif "OCCULTED" in status:
+        code = "1;35"
+
+    elif "TRANSITING" in status:
+        code = "1;33"
+
+    elif (
+        "SHADOW" in status
+        or "ECLIPSE" in status
+    ):
+        code = "1;34"
+
+    elif "UNKNOWN" in status:
+        code = "1;31"
+
+    else:
+        code = "1;36"
+
+    return ansi(text, code)
+
+
+def event_style(text):
+    """
+    Color upcoming astronomical event descriptions.
+    """
+    lowered = text.lower()
+
+    if (
+        "sunrise" in lowered
+        or "sunset" in lowered
+    ):
+        return ansi(text, "1;33")
+
+    if (
+        "dawn" in lowered
+        or "twilight" in lowered
+    ):
+        return ansi(text, "1;36")
+
+    if (
+        "behind jupiter" in lowered
+        or "crossing jupiter" in lowered
+        or "jupiter's shadow" in lowered
+    ):
+        return ansi(text, "1;35")
+
+    if (
+        " rises " in f" {lowered} "
+        or " sets " in f" {lowered} "
+    ):
+        return ansi(text, "1;32")
+
+    return ansi(text, "1;36")
 
 
 def cache_file_for(key):
@@ -721,19 +797,25 @@ def show_current():
     )
 
     print()
-    print("NEXUS CITY · IO")
+    print(
+        heading("NEXUS CITY · IO")
+    )
     print("0°00′N · 50°00′W")
     print("─" * 44)
 
     print(
         f"Nexus Standard Time    {nst}"
     )
+
     print()
 
-    print("IOVIAN SKY")
+    print(
+        section_heading("IOVIAN SKY")
+    )
 
     print(
-        f"Natural condition      {condition}"
+        f"Natural condition      "
+        f"{condition_style(condition)}"
     )
 
     print(
@@ -748,7 +830,9 @@ def show_current():
 
     print()
 
-    print("JUPITER")
+    print(
+        section_heading("JUPITER")
+    )
 
     print(
         f"Azimuth                "
@@ -786,14 +870,22 @@ def show_current():
 
     if eclipse:
         print()
-        print("⚠ JOVIAN ECLIPSE")
         print(
-            "Jupiter is obscuring the Sun "
-            f"over {NEXUS_NAME}."
+            ansi(
+                "⚠ JOVIAN ECLIPSE",
+                "1;31",
+            )
+        )
+
+        print(
+            ansi(
+                "Jupiter is obscuring the Sun "
+                f"over {NEXUS_NAME}.",
+                "1;31",
+            )
         )
 
     print()
-
 
 # ---------------------------------------------------------------------
 # Display next eclipse
@@ -801,47 +893,74 @@ def show_current():
 
 def show_next_eclipse():
     print()
-    print("NEXUS CITY · IO")
+    print(
+        heading("NEXUS CITY · IO")
+    )
     print("0°00′N · 50°00′W")
     print("─" * 44)
-    print("NEXT JOVIAN ECLIPSE")
+
+    print(
+        section_heading(
+            "NEXT JOVIAN ECLIPSE"
+        )
+    )
+
     print()
 
     event = find_next_eclipse()
 
     if event is None:
         print(
-            "No visible Jovian eclipse found "
-            "within the next 48 hours."
+            ansi(
+                "No visible Jovian eclipse found "
+                "within the next 48 hours.",
+                "2",
+            )
         )
+
         print()
         return
 
     print(
-        f"Begins                 "
-        f"{format_nst(event['begin'])}"
+        ansi(
+            f"Begins                 "
+            f"{format_nst(event['begin'])}",
+            "1;36",
+        )
     )
 
     if event["total_begin"]:
         print(
-            f"Totality begins        "
-            f"{format_nst(event['total_begin'])}"
+            ansi(
+                f"Totality begins        "
+                f"{format_nst(event['total_begin'])}",
+                "1;33",
+            )
         )
 
     print(
-        f"Maximum                "
-        f"{format_nst(event['maximum'])}"
+        ansi(
+            f"Maximum                "
+            f"{format_nst(event['maximum'])}",
+            "1;35",
+        )
     )
 
     if event["total_end"]:
         print(
-            f"Totality ends          "
-            f"{format_nst(event['total_end'])}"
+            ansi(
+                f"Totality ends          "
+                f"{format_nst(event['total_end'])}",
+                "1;33",
+            )
         )
 
     print(
-        f"Ends                   "
-        f"{format_nst(event['end'])}"
+        ansi(
+            f"Ends                   "
+            f"{format_nst(event['end'])}",
+            "1;36",
+        )
     )
 
     print(
@@ -855,9 +974,14 @@ def show_next_eclipse():
     )
 
     print()
+
     print(
-        "Forecast resolution: approximately 1 minute."
+        ansi(
+            "Forecast resolution: approximately 1 minute.",
+            "2",
+        )
     )
+
     print()
 
 def show_jovian_sky():
@@ -868,7 +992,9 @@ def show_jovian_sky():
     )
 
     print()
-    print("NEXUS CITY · IO")
+    print(
+        heading("NEXUS CITY · IO")
+    )
     print("0°00′N · 50°00′W")
     print("─" * 94)
 
@@ -877,16 +1003,24 @@ def show_jovian_sky():
     )
 
     print()
-    print("JOVIAN SYSTEM")
-    print()
 
     print(
+        section_heading("JOVIAN SYSTEM")
+    )
+
+    print()
+
+    header = (
         f"{'Body':<12}"
         f"{'Status':<30}"
         f"{'Direction':<18}"
         f"{'Elevation':>12}"
         f"{'Size':>10}"
         f"{'From Jupiter':>14}"
+    )
+
+    print(
+        ansi(header, "1")
     )
 
     print("─" * 96)
@@ -899,6 +1033,7 @@ def show_jovian_sky():
                 if body["elevation"] >= 0
                 else "BELOW HORIZON"
             )
+
         else:
             status = satellite_status(
                 body["sat_vis"],
@@ -916,14 +1051,25 @@ def show_jovian_sky():
 
         if body["name"] == "Jupiter":
             separation = "—"
+
         else:
             separation = (
                 f"{body['separation_deg']:.2f}°"
             )
 
+        body_field = ansi(
+            f"{body['name']:<12}",
+            "1;36",
+        )
+
+        status_field = status_style(
+            f"{status:<30}",
+            status,
+        )
+
         print(
-            f"{body['name']:<12}"
-            f"{status:<30}"
+            f"{body_field}"
+            f"{status_field}"
             f"{direction:<18}"
             f"{body['elevation']:>+11.2f}°"
             f"{size:>10}"
@@ -931,7 +1077,11 @@ def show_jovian_sky():
         )
 
     print()
-    print("SKY SUMMARY")
+
+    print(
+        section_heading("SKY SUMMARY")
+    )
+
     print()
 
     for body in bodies:
@@ -949,13 +1099,29 @@ def show_jovian_sky():
         if name == "Jupiter":
 
             if body["elevation"] >= 0:
-                print(
-                    f"• Jupiter dominates the {direction} sky, "
-                    f"{height}."
+                sentence = (
+                    f"• Jupiter dominates the "
+                    f"{direction} sky, {height}."
                 )
-            else:
+
                 print(
-                    "• Jupiter is currently below the horizon."
+                    status_style(
+                        sentence,
+                        "VISIBLE",
+                    )
+                )
+
+            else:
+                sentence = (
+                    "• Jupiter is currently "
+                    "below the horizon."
+                )
+
+                print(
+                    status_style(
+                        sentence,
+                        "BELOW HORIZON",
+                    )
                 )
 
             continue
@@ -966,44 +1132,57 @@ def show_jovian_sky():
         )
 
         if status == "VISIBLE":
-            print(
+            sentence = (
                 f"• {name} is visible {height} "
                 f"in the {direction}."
             )
 
         elif status == "TRANSITING JUPITER":
-            print(
-                f"• {name} is crossing the face of Jupiter."
+            sentence = (
+                f"• {name} is crossing "
+                "the face of Jupiter."
             )
 
         elif status == "OCCULTED BY JUPITER":
-            print(
+            sentence = (
                 f"• {name} is hidden behind Jupiter."
             )
 
         elif status == "IN JUPITER'S SHADOW":
-            print(
+            sentence = (
                 f"• {name} is currently inside "
                 "Jupiter's shadow."
             )
 
         elif status == "BELOW HORIZON":
-            print(
-                f"• {name} is below the Nexus City horizon."
+            sentence = (
+                f"• {name} is below "
+                "the Nexus City horizon."
             )
 
         else:
-            print(
+            sentence = (
                 f"• {name}: {status}."
             )
 
-    print()
-    print(
-        "Angular sizes, positions, and satellite states "
-        "are JPL Horizons values."
-    )
+        print(
+            status_style(
+                sentence,
+                status,
+            )
+        )
+
     print()
 
+    print(
+        ansi(
+            "Angular sizes, positions, and satellite states "
+            "are JPL Horizons values.",
+            "2",
+        )
+    )
+
+    print()
 
 # ---------------------------------------------------------------------
 # Command-line interface
@@ -1189,19 +1368,31 @@ def find_satellite_events(hours=48):
 
 def show_satellite_events():
     print()
-    print("NEXUS CITY · IO")
+    print(
+        heading("NEXUS CITY · IO")
+    )
     print("0°00′N · 50°00′W")
     print("─" * 72)
-    print("UPCOMING JOVIAN EVENTS")
+
+    print(
+        section_heading(
+            "UPCOMING JOVIAN EVENTS"
+        )
+    )
+
     print()
 
     events = find_satellite_events()
 
     if not events:
         print(
-            "No Galilean moon events found "
-            "within the next 48 hours."
+            ansi(
+                "No Galilean moon events found "
+                "within the next 48 hours.",
+                "2",
+            )
         )
+
         print()
         return
 
@@ -1212,17 +1403,21 @@ def show_satellite_events():
         )
 
         print(
-            f"{timestamp:<24}"
-            f"{event['description']}"
+            f"{ansi(f'{timestamp:<24}', '2')}"
+            f"{event_style(event['description'])}"
         )
 
     print()
-    print(
-        "Forecast window: 48 hours · "
-        "resolution: approximately 2 minutes."
-    )
-    print()
 
+    print(
+        ansi(
+            "Forecast window: 48 hours · "
+            "resolution: approximately 2 minutes.",
+            "2",
+        )
+    )
+
+    print()
 
 # ---------------------------------------------------------------------
 # Iovian daylight and twilight forecasting
@@ -1477,15 +1672,23 @@ def show_solar_forecast():
     )
 
     print()
-    print("NEXUS CITY · IO")
+    print(
+        heading("NEXUS CITY · IO")
+    )
     print("0°00′N · 50°00′W")
     print("─" * 72)
-    print("IOVIAN LIGHT CYCLE")
+
+    print(
+        section_heading(
+            "IOVIAN LIGHT CYCLE"
+        )
+    )
+
     print()
 
     print(
         f"{'Current':<24}"
-        f"{current_state}"
+        f"{light_state_style(current_state)}"
     )
 
     print(
@@ -1497,11 +1700,21 @@ def show_solar_forecast():
         next_event = events[0]
 
         print()
-        print("NEXT TRANSITION")
-        print()
 
         print(
+            section_heading(
+                "NEXT TRANSITION"
+            )
+        )
+
+        print()
+
+        description_field = event_style(
             f"{next_event['description']:<30}"
+        )
+
+        print(
+            f"{description_field}"
             f"{next_event['time'].strftime('%a %d %b  %H:%M NST')}"
         )
 
@@ -1529,47 +1742,74 @@ def show_solar_forecast():
     )
 
     print()
-    print("NEXT SUNRISE / SUNSET")
+
+    print(
+        section_heading(
+            "NEXT SUNRISE / SUNSET"
+        )
+    )
+
     print()
 
     if next_sunrise:
-        print(
+
+        sunrise_label = event_style(
             f"{'Sunrise':<24}"
+        )
+
+        print(
+            f"{sunrise_label}"
             f"{next_sunrise['time'].strftime('%a %d %b  %H:%M NST')}"
             f"   "
             f"({format_time_until(next_sunrise['time'], now)})"
         )
 
     if next_sunset:
-        print(
+
+        sunset_label = event_style(
             f"{'Sunset':<24}"
+        )
+
+        print(
+            f"{sunset_label}"
             f"{next_sunset['time'].strftime('%a %d %b  %H:%M NST')}"
             f"   "
             f"({format_time_until(next_sunset['time'], now)})"
         )
 
     print()
-    print("UPCOMING LIGHT CHANGES")
+
+    print(
+        section_heading(
+            "UPCOMING LIGHT CHANGES"
+        )
+    )
+
     print()
 
     for event in events[:12]:
+
         timestamp = event["time"].strftime(
             "%a %d %b  %H:%M NST"
         )
 
         print(
-            f"{timestamp:<24}"
-            f"{event['description']}"
+            f"{ansi(f'{timestamp:<24}', '2')}"
+            f"{event_style(event['description'])}"
         )
 
     print()
-    print(
-        "Forecast window: 60 hours · "
-        "Horizons sampling: 2 minutes · "
-        "crossing times interpolated."
-    )
-    print()
 
+    print(
+        ansi(
+            "Forecast window: 60 hours · "
+            "Horizons sampling: 2 minutes · "
+            "crossing times interpolated.",
+            "2",
+        )
+    )
+
+    print()
 
 # ---------------------------------------------------------------------
 # Unified Nexus City forecast
@@ -1632,15 +1872,27 @@ def _capture_next_eclipse_report_uncached():
     """
     Reuse the existing --next eclipse forecast and return only
     its useful report lines for inclusion in --forecast.
+
+    Color is temporarily disabled while capturing so cached
+    report text never contains ANSI escape sequences.
     """
+    global USE_COLOR
 
     import io
     from contextlib import redirect_stdout
 
     buffer = io.StringIO()
 
-    with redirect_stdout(buffer):
-        show_next_eclipse()
+    previous_color = USE_COLOR
+
+    try:
+        USE_COLOR = False
+
+        with redirect_stdout(buffer):
+            show_next_eclipse()
+
+    finally:
+        USE_COLOR = previous_color
 
     lines = [
         line.rstrip()
@@ -1658,7 +1910,6 @@ def _capture_next_eclipse_report_uncached():
         for line in lines
         if line.strip()
     ]
-
 
 def capture_next_eclipse_report():
     """

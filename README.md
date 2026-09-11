@@ -215,7 +215,7 @@ iotime --version
 Current release:
 
 ```text
-iotime 1.0.0
+iotime 1.0.1
 ```
 
 ## Astronomy notes
