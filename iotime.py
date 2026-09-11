@@ -37,7 +37,7 @@ GALILEAN_MOONS = {
 # iotime application settings
 # ---------------------------------------------------------------------
 
-IOTIME_VERSION = "1.0.1"
+IOTIME_VERSION = "1.1.0"
 
 CACHE_DIR = (
     Path.home()

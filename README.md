@@ -215,7 +215,7 @@ iotime --version
 Current release:
 
 ```text
-iotime 1.0.1
+iotime 1.1.0
 ```
 
 ## Astronomy notes
@@ -261,6 +261,66 @@ This project began as a worldbuilding experiment: determine where on Io the city
 The canonical site settled at approximately **0° N, 50° W**, where Jupiter appears roughly 40° above the horizon.
 
 `iotime` grew from that experiment into a working astronomical forecast for the city.
+
+
+## Historical sky reconstruction
+
+Starting with **iotime 1.1.0**, any normal `iotime` mode can use a historical Nexus Standard Time timestamp instead of the current time.
+
+Timestamp format:
+
+```text
+YYYY-MM-DDTHH:MM
+```
+
+or:
+
+```text
+YYYY-MM-DDTHH:MM:SS
+```
+
+For example:
+
+```bash
+iotime 1996-06-17T13:30
+```
+
+reconstructs the Nexus City sky at 13:30 NST on June 17, 1996.
+
+Historical timestamps work with every display mode:
+
+```bash
+iotime 1996-06-17T13:30
+iotime 1996-06-17T13:30 --sky
+iotime 1996-06-17T13:30 --sun
+iotime 1996-06-17T13:30 --next
+iotime 1996-06-17T13:30 --events
+iotime 1996-06-17T13:30 --forecast
+```
+
+The supplied timestamp becomes the reference time for the calculation.
+
+That means historical forecasts can show:
+
+- the natural daylight or twilight state
+- the position and phase of Jupiter
+- the positions and visibility states of the Galilean moons
+- upcoming sunrise and sunset
+- upcoming Galilean moon events
+- the next Jovian solar eclipse
+- a unified 24-hour Nexus City forecast
+
+For example:
+
+```bash
+iotime 1996-06-17T13:30 --forecast
+```
+
+can reconstruct the Nexus City sky during the PPA story era and forecast astronomical events forward from that exact moment.
+
+Historical satellite-event and eclipse forecasts bypass the normal short-lived live-data cache. This prevents cached present-day results from ever being mixed with historical calculations.
+
+Because **Nexus Standard Time is numerically identical to UTC**, supplied timestamps are interpreted directly as NST/UTC.
 
 ## Data and trademarks
 
