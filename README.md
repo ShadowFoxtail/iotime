@@ -339,3 +339,7 @@ Astronomical calculations and ephemeris data are provided through NASA/JPL Horiz
 This project is not affiliated with or endorsed by NASA, JPL, Caltech, Astropy, or the developers of Astroquery.
 
 Nexus City and the associated fictional setting are independent creative works.
+
+## License
+
+iotime is licensed under the BSD 3-Clause License. See [LICENSE](LICENSE) for details.
