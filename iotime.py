@@ -1942,7 +1942,7 @@ def forecast_body_description(body):
     return status.lower()
 
 
-def _capture_next_eclipse_report_uncached():
+def _capture_next_eclipse_report_uncached(reference_time=None):
     """
     Reuse the existing --next eclipse forecast and return only
     its useful report lines for inclusion in --forecast.
@@ -1963,7 +1963,9 @@ def _capture_next_eclipse_report_uncached():
         USE_COLOR = False
 
         with redirect_stdout(buffer):
-            show_next_eclipse()
+            show_next_eclipse(
+                reference_time
+            )
 
     finally:
         USE_COLOR = previous_color
@@ -1985,11 +1987,16 @@ def _capture_next_eclipse_report_uncached():
         if line.strip()
     ]
 
-def capture_next_eclipse_report():
+def capture_next_eclipse_report(reference_time=None):
     """
     Retrieve the next-eclipse report, caching it briefly because
     eclipse geometry does not need to be recalculated every run.
     """
+
+    if reference_time is not None:
+        return _capture_next_eclipse_report_uncached(
+            reference_time
+        )
 
     cache_key = "next-eclipse-report"
 
@@ -2013,7 +2020,7 @@ def capture_next_eclipse_report():
     return report
 
 
-def show_nexus_forecast():
+def show_nexus_forecast(reference_time=None):
     """
     Present the unified Nexus City astronomical forecast.
     """
@@ -2025,12 +2032,18 @@ def show_nexus_forecast():
         current_sun_el,
         sun_trend,
         solar_events,
-    ) = find_solar_events()
+    ) = find_solar_events(
+        reference_time=reference_time
+    )
 
-    _, bodies = get_jovian_sky()
+    _, bodies = get_jovian_sky(
+        reference_time
+    )
 
     satellite_events = (
-        find_satellite_events()
+        find_satellite_events(
+            reference_time=reference_time
+        )
     )
 
     current_light = solar_state(
@@ -2061,8 +2074,16 @@ def show_nexus_forecast():
     # Current natural light
     # ---------------------------------------------------------
 
+    current_section = (
+        "REFERENCE TIME"
+        if reference_time is not None
+        else "NOW"
+    )
+
     print(
-        section_heading("NOW")
+        section_heading(
+            current_section
+        )
     )
     print("─" * 78)
 
@@ -2182,7 +2203,9 @@ def show_nexus_forecast():
     print("─" * 78)
 
     eclipse_lines = (
-        capture_next_eclipse_report()
+        capture_next_eclipse_report(
+            reference_time
+        )
     )
 
     if eclipse_lines:
@@ -2300,20 +2323,6 @@ def main():
     except ValueError as error:
         parser.error(str(error))
 
-    specialized_mode_requested = any((
-        args.forecast,
-    ))
-
-    if (
-        reference_time is not None
-        and specialized_mode_requested
-    ):
-        parser.error(
-            "historical timestamps currently work "
-            "with the default display only; "
-            "additional modes are coming in v1.1"
-        )
-
     try:
         if args.next:
             show_next_eclipse(reference_time)
@@ -2328,7 +2337,7 @@ def main():
             show_solar_forecast(reference_time)
 
         elif args.forecast:
-            show_nexus_forecast()
+            show_nexus_forecast(reference_time)
 
         else:
             show_current(reference_time)
