@@ -38,7 +38,7 @@ GALILEAN_MOONS = {
 # iotime application settings
 # ---------------------------------------------------------------------
 
-IOTIME_VERSION = "1.1.2"
+IOTIME_VERSION = "1.2.0"
 JSON_SCHEMA_VERSION = 1
 
 CACHE_DIR = (

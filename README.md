@@ -225,7 +225,7 @@ iotime --version
 Current release:
 
 ```text
-iotime 1.1.2
+iotime 1.2.0
 ```
 
 ## Astronomy notes
@@ -272,6 +272,75 @@ The canonical site settled at approximately **0° N, 50° W**, where Jupiter app
 
 `iotime` grew from that experiment into a working astronomical forecast for the city.
 
+
+## JSON output
+
+Starting with **iotime 1.2.0**, every display mode can emit structured machine-readable JSON.
+
+Use `--json` with the normal snapshot:
+
+```bash
+iotime --json
+```
+
+or combine it with any forecast mode:
+
+```bash
+iotime --sky --json
+iotime --events --json
+iotime --sun --json
+iotime --next --json
+iotime --forecast --json
+```
+
+Historical timestamps work with JSON exactly as they do with the normal human-readable output:
+
+```bash
+iotime 1996-06-17T13:30 --forecast --json
+```
+
+JSON output is designed for scripts, graphical interfaces, game engines, and other software that wants to use Nexus City astronomical data directly.
+
+The JSON interface includes:
+
+- schema and iotime version metadata
+- explicit or live reference timestamps in NST and UTC
+- Nexus City observer information
+- numerical azimuth, elevation, angular size, illumination, and separation values
+- machine-readable natural-light and eclipse states
+- Jupiter and Galilean moon visibility states
+- solar, satellite, and eclipse event types
+- event countdowns in seconds
+- unified 24-hour forecast timelines
+
+Machine-readable values use explicit units in their field names, such as `elevation_deg`, `angular_diameter_deg`, `illumination_percent`, and `seconds_until`.
+
+Human-readable labels are retained alongside stable machine identifiers where useful.
+
+For example, during a daytime Jovian eclipse the JSON can distinguish the geometric solar state from the observed light state:
+
+```json
+{
+  "natural_light": {
+    "observed_state": "total_jovian_eclipse",
+    "observed_label": "TOTAL JOVIAN ECLIPSE",
+    "solar_state": "day",
+    "solar_label": "DAY"
+  }
+}
+```
+
+This allows software such as a graphical Nexus City renderer to know that Sol is geometrically above the horizon while Jupiter is blocking it.
+
+The current JSON schema version is:
+
+```json
+{
+  "schema_version": 1
+}
+```
+
+Successful `--json` requests write only JSON to standard output. Diagnostic errors are written to standard error so JSON output can be safely piped into another program.
 
 ## Historical sky reconstruction
 
