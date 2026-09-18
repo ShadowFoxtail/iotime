@@ -1,6 +1,7 @@
  #!/usr/bin/env python3
 
 import argparse
+import json
 import os
 import pickle
 import time
@@ -38,6 +39,7 @@ GALILEAN_MOONS = {
 # ---------------------------------------------------------------------
 
 IOTIME_VERSION = "1.1.2"
+JSON_SCHEMA_VERSION = 1
 
 CACHE_DIR = (
     Path.home()
@@ -477,6 +479,55 @@ def parse_nst_timestamp(value):
     )
 
 
+
+def machine_name(value):
+    """
+    Convert a human-readable iotime state into a stable,
+    machine-friendly identifier.
+    """
+    if value is None:
+        return None
+
+    normalized = "".join(
+        char.lower()
+        if char.isalnum()
+        else "_"
+        for char in value
+    )
+
+    while "__" in normalized:
+        normalized = normalized.replace(
+            "__",
+            "_",
+        )
+
+    return normalized.strip("_")
+
+
+def json_time(moment):
+    """
+    Return the same instant in canonical NST and UTC forms.
+
+    NST is numerically identical to UTC.
+    """
+    utc = moment.astimezone(
+        timezone.utc
+    )
+
+    return {
+        "nst":
+            utc.strftime(
+                "%Y-%m-%dT%H:%M:%S"
+            ),
+        "utc":
+            utc.strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            ),
+        "nst_utc_offset_seconds": 0,
+    }
+
+
+
 def get_sky(reference_time=None):
     now = (
         reference_time
@@ -538,6 +589,181 @@ def get_sky(reference_time=None):
         "sun_jupiter_separation":
             float(jupiter_now["elong"]),
     }
+
+
+def build_snapshot_json(reference_time=None):
+    """
+    Build machine-readable data for the ordinary iotime
+    sky snapshot.
+    """
+    sky = get_sky(
+        reference_time
+    )
+
+    phase_label = jupiter_phase(
+        sky["jupiter_illumination"],
+        sky["jupiter_later_illumination"],
+    )
+
+    solar_label = sky_condition(
+        sky["sun_elevation"]
+    )
+
+    eclipse_label = eclipse_condition(
+        sky["sun_jupiter_separation"],
+        sky["sun_diameter_deg"],
+        sky["jupiter_diameter_deg"],
+    )
+
+    observed_label = (
+        eclipse_label
+        if eclipse_label is not None
+        else solar_label
+    )
+
+    return {
+        "schema_version":
+            JSON_SCHEMA_VERSION,
+
+        "iotime_version":
+            IOTIME_VERSION,
+
+        "mode":
+            "snapshot",
+
+        "reference_kind":
+            (
+                "explicit"
+                if reference_time is not None
+                else "live"
+            ),
+
+        "time":
+            json_time(
+                sky["time"]
+            ),
+
+        "observer": {
+            "name":
+                NEXUS_NAME,
+
+            "body":
+                "Io",
+
+            "body_id":
+                IO_ID,
+
+            "latitude_deg":
+                NEXUS_LATITUDE,
+
+            "longitude_west_deg":
+                NEXUS_LONGITUDE_WEST,
+
+            "elevation_km":
+                NEXUS_ELEVATION_KM,
+        },
+
+        "natural_light": {
+            "observed_state":
+                machine_name(
+                    observed_label
+                ),
+
+            "observed_label":
+                observed_label,
+
+            "solar_state":
+                machine_name(
+                    solar_label
+                ),
+
+            "solar_label":
+                solar_label,
+        },
+
+        "sun": {
+            "azimuth_deg":
+                sky["sun_azimuth"],
+
+            "elevation_deg":
+                sky["sun_elevation"],
+
+            "angular_diameter_deg":
+                sky["sun_diameter_deg"],
+        },
+
+        "jupiter": {
+            "azimuth_deg":
+                sky["jupiter_azimuth"],
+
+            "elevation_deg":
+                sky["jupiter_elevation"],
+
+            "phase":
+                machine_name(
+                    phase_label
+                ),
+
+            "phase_label":
+                phase_label,
+
+            "illumination_percent":
+                sky[
+                    "jupiter_illumination"
+                ],
+
+            "angular_diameter_deg":
+                sky[
+                    "jupiter_diameter_deg"
+                ],
+
+            "phase_angle_deg":
+                sky[
+                    "jupiter_phase_angle"
+                ],
+
+            "separation_from_sun_deg":
+                sky[
+                    "sun_jupiter_separation"
+                ],
+        },
+
+        "eclipse": {
+            "active":
+                eclipse_label is not None,
+
+            "phase":
+                machine_name(
+                    eclipse_label
+                ),
+
+            "label":
+                eclipse_label,
+        },
+
+        "source":
+            "JPL Horizons",
+    }
+
+
+def show_snapshot_json(reference_time=None):
+    """
+    Print a snapshot as JSON and nothing else.
+    """
+    data = build_snapshot_json(
+        reference_time
+    )
+
+    json.dump(
+        data,
+        sys.stdout,
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    print()
+
+
 
 def get_jovian_sky(reference_time=None):
     """
@@ -2600,6 +2826,12 @@ def main():
     )
 
     parser.add_argument(
+        "--json",
+        action="store_true",
+        help="emit machine-readable JSON output",
+    )
+
+    parser.add_argument(
         "--version",
         action="version",
         version=(
@@ -2623,7 +2855,26 @@ def main():
         parser.error(str(error))
 
     try:
-        if args.next:
+        if args.json:
+            specialized_json_mode = any((
+                args.next,
+                args.sky,
+                args.events,
+                args.sun,
+                args.forecast,
+            ))
+
+            if specialized_json_mode:
+                parser.error(
+                    "--json currently supports the "
+                    "default snapshot only."
+                )
+
+            show_snapshot_json(
+                reference_time
+            )
+
+        elif args.next:
             show_next_eclipse(reference_time)
 
         elif args.sky:
