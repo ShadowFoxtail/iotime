@@ -1403,6 +1403,172 @@ def show_next_eclipse(reference_time=None):
 
     print()
 
+
+def build_jovian_sky_json(reference_time=None):
+    """
+    Build machine-readable data for Jupiter and the
+    Galilean moons visible from Nexus City.
+    """
+    now, bodies = get_jovian_sky(
+        reference_time
+    )
+
+    json_bodies = []
+
+    for body in bodies:
+        name = body["name"]
+
+        if name == "Jupiter":
+            target_id = JUPITER_ID
+            body_type = "planet"
+
+            status = (
+                "VISIBLE"
+                if body["elevation"] >= 0
+                else "BELOW HORIZON"
+            )
+
+            raw_visibility_code = None
+
+        else:
+            target_id = GALILEAN_MOONS[
+                name
+            ]
+
+            body_type = "moon"
+
+            status = satellite_status(
+                body["sat_vis"],
+                body["elevation"],
+            )
+
+            raw_visibility_code = (
+                str(
+                    body["sat_vis"]
+                )
+                .strip()
+                .lstrip("/")
+            )
+
+        json_bodies.append({
+            "name":
+                name,
+
+            "target_id":
+                target_id,
+
+            "body_type":
+                body_type,
+
+            "above_horizon":
+                body["elevation"] >= 0,
+
+            "visibility_state":
+                machine_name(
+                    status
+                ),
+
+            "visibility_label":
+                status,
+
+            "horizons_visibility_code":
+                raw_visibility_code,
+
+            "azimuth_deg":
+                body["azimuth"],
+
+            "elevation_deg":
+                body["elevation"],
+
+            "angular_diameter_deg":
+                body["diameter_deg"],
+
+            "separation_from_jupiter_deg":
+                body["separation_deg"],
+
+            "compass_direction":
+                compass_direction(
+                    body["azimuth"]
+                ),
+
+            "elevation_description":
+                elevation_description(
+                    body["elevation"]
+                ),
+        })
+
+    return {
+        "schema_version":
+            JSON_SCHEMA_VERSION,
+
+        "iotime_version":
+            IOTIME_VERSION,
+
+        "mode":
+            "sky",
+
+        "reference_kind":
+            (
+                "explicit"
+                if reference_time is not None
+                else "live"
+            ),
+
+        "time":
+            json_time(
+                now
+            ),
+
+        "observer": {
+            "name":
+                NEXUS_NAME,
+
+            "body":
+                "Io",
+
+            "body_id":
+                IO_ID,
+
+            "latitude_deg":
+                NEXUS_LATITUDE,
+
+            "longitude_west_deg":
+                NEXUS_LONGITUDE_WEST,
+
+            "elevation_km":
+                NEXUS_ELEVATION_KM,
+        },
+
+        "primary":
+            "Jupiter",
+
+        "bodies":
+            json_bodies,
+
+        "source":
+            "JPL Horizons",
+    }
+
+
+def show_jovian_sky_json(reference_time=None):
+    """
+    Print Jovian-system sky data as JSON and nothing else.
+    """
+    data = build_jovian_sky_json(
+        reference_time
+    )
+
+    json.dump(
+        data,
+        sys.stdout,
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    print()
+
+
+
 def show_jovian_sky(reference_time=None):
     now, bodies = get_jovian_sky(reference_time)
 
@@ -2856,23 +3022,28 @@ def main():
 
     try:
         if args.json:
-            specialized_json_mode = any((
+            unsupported_json_mode = any((
                 args.next,
-                args.sky,
                 args.events,
                 args.sun,
                 args.forecast,
             ))
 
-            if specialized_json_mode:
+            if unsupported_json_mode:
                 parser.error(
                     "--json currently supports the "
-                    "default snapshot only."
+                    "default snapshot and --sky."
                 )
 
-            show_snapshot_json(
-                reference_time
-            )
+            if args.sky:
+                show_jovian_sky_json(
+                    reference_time
+                )
+
+            else:
+                show_snapshot_json(
+                    reference_time
+                )
 
         elif args.next:
             show_next_eclipse(reference_time)
