@@ -504,6 +504,26 @@ def machine_name(value):
     return normalized.strip("_")
 
 
+
+def round_datetime_to_second(moment):
+    """
+    Round a datetime to the nearest second.
+
+    JPL Horizons Julian-date conversions can produce tiny
+    floating-point artifacts such as 16:11:59.999999 for an
+    instant that is effectively 16:12:00.
+    """
+    if moment.microsecond >= 500000:
+        moment += timedelta(
+            seconds=1
+        )
+
+    return moment.replace(
+        microsecond=0
+    )
+
+
+
 def json_time(moment):
     """
     Return the same instant in canonical NST and UTC forms.
@@ -513,17 +533,10 @@ def json_time(moment):
     Round to the nearest second so tiny floating-point artifacts
     from Julian-date conversion do not appear as :59 timestamps.
     """
-    utc = moment.astimezone(
-        timezone.utc
-    )
-
-    if utc.microsecond >= 500000:
-        utc += timedelta(
-            seconds=1
+    utc = round_datetime_to_second(
+        moment.astimezone(
+            timezone.utc
         )
-
-    utc = utc.replace(
-        microsecond=0
     )
 
     return {
@@ -869,11 +882,17 @@ def get_jovian_sky(reference_time=None):
 # ---------------------------------------------------------------------
 
 def jd_to_datetime(jd):
-    return Time(
+    moment = Time(
         float(jd),
         format="jd",
         scale="utc",
-    ).to_datetime(timezone=timezone.utc)
+    ).to_datetime(
+        timezone=timezone.utc
+    )
+
+    return round_datetime_to_second(
+        moment
+    )
 
 
 def find_next_eclipse(reference_time=None):
@@ -3427,6 +3446,582 @@ def capture_next_eclipse_report(reference_time=None):
     return report
 
 
+
+def build_nexus_forecast_json(reference_time=None):
+    """
+    Build the unified Nexus City forecast as machine-readable
+    JSON data.
+    """
+
+    (
+        now,
+        current_sun_el,
+        sun_trend,
+        solar_events,
+    ) = find_solar_events(
+        reference_time=reference_time
+    )
+
+    _, bodies = get_jovian_sky(
+        reference_time
+    )
+
+    satellite_events = find_satellite_events(
+        reference_time=reference_time
+    )
+
+    eclipse_event = get_eclipse_event(
+        reference_time
+    )
+
+    eclipse_phase = eclipse_phase_at(
+        eclipse_event,
+        now,
+    )
+
+    solar_label = solar_state(
+        current_sun_el
+    )
+
+    observed_label = (
+        eclipse_phase
+        if eclipse_phase is not None
+        else solar_label
+    )
+
+    # --------------------------------------------------------
+    # Current Jovian sky
+    # --------------------------------------------------------
+
+    json_bodies = []
+
+    for body in bodies:
+        name = body["name"]
+
+        if name == "Jupiter":
+            target_id = JUPITER_ID
+            body_type = "planet"
+
+            status = (
+                "VISIBLE"
+                if body["elevation"] >= 0
+                else "BELOW HORIZON"
+            )
+
+            raw_visibility_code = None
+
+        else:
+            target_id = GALILEAN_MOONS[
+                name
+            ]
+
+            body_type = "moon"
+
+            status = satellite_status(
+                body["sat_vis"],
+                body["elevation"],
+            )
+
+            raw_visibility_code = (
+                str(
+                    body["sat_vis"]
+                )
+                .strip()
+                .lstrip("/")
+            )
+
+        json_bodies.append({
+            "name":
+                name,
+
+            "target_id":
+                target_id,
+
+            "body_type":
+                body_type,
+
+            "above_horizon":
+                body["elevation"] >= 0,
+
+            "visibility_state":
+                satellite_state_name(
+                    status
+                ),
+
+            "visibility_label":
+                status,
+
+            "horizons_visibility_code":
+                raw_visibility_code,
+
+            "azimuth_deg":
+                body["azimuth"],
+
+            "elevation_deg":
+                body["elevation"],
+
+            "angular_diameter_deg":
+                body["diameter_deg"],
+
+            "separation_from_jupiter_deg":
+                body["separation_deg"],
+
+            "compass_direction":
+                compass_direction(
+                    body["azimuth"]
+                ),
+
+            "elevation_description":
+                elevation_description(
+                    body["elevation"]
+                ),
+        })
+
+    # --------------------------------------------------------
+    # Combined 24-hour timeline
+    # --------------------------------------------------------
+
+    cutoff = (
+        now
+        + timedelta(hours=24)
+    )
+
+    timeline = []
+
+    for event in solar_events:
+        if (
+            now
+            < event["time"]
+            <= cutoff
+        ):
+            timeline.append({
+                "time":
+                    json_time(
+                        event["time"]
+                    ),
+
+                "seconds_until":
+                    seconds_until(
+                        event["time"],
+                        now,
+                    ),
+
+                "category":
+                    "solar",
+
+                "event_type":
+                    solar_event_type(
+                        event
+                    ),
+
+                "description":
+                    event["description"],
+            })
+
+    for event in satellite_events:
+        if (
+            now
+            < event["time"]
+            <= cutoff
+        ):
+            timeline.append({
+                "time":
+                    json_time(
+                        event["time"]
+                    ),
+
+                "seconds_until":
+                    seconds_until(
+                        event["time"],
+                        now,
+                    ),
+
+                "category":
+                    "galilean_moon",
+
+                "event_type":
+                    satellite_event_type(
+                        event["old_state"],
+                        event["new_state"],
+                    ),
+
+                "body":
+                    event["body"],
+
+                "target_id":
+                    GALILEAN_MOONS[
+                        event["body"]
+                    ],
+
+                "old_state":
+                    satellite_state_name(
+                        event["old_state"]
+                    ),
+
+                "new_state":
+                    satellite_state_name(
+                        event["new_state"]
+                    ),
+
+                "description":
+                    event["description"],
+            })
+
+    if eclipse_event is not None:
+        eclipse_milestones = [
+            (
+                eclipse_event["begin"],
+                "jovian_eclipse_begin",
+                "Jovian eclipse begins",
+            ),
+            (
+                eclipse_event["total_begin"],
+                "jovian_totality_begin",
+                "Jovian totality begins",
+            ),
+            (
+                eclipse_event["maximum"],
+                "jovian_eclipse_maximum",
+                "Maximum Jovian eclipse",
+            ),
+            (
+                eclipse_event["total_end"],
+                "jovian_totality_end",
+                "Jovian totality ends",
+            ),
+            (
+                eclipse_event["end"],
+                "jovian_eclipse_end",
+                "Jovian eclipse ends",
+            ),
+        ]
+
+        for (
+            event_time,
+            event_type,
+            description,
+        ) in eclipse_milestones:
+
+            if (
+                event_time is not None
+                and now
+                < event_time
+                <= cutoff
+            ):
+                timeline.append({
+                    "time":
+                        json_time(
+                            event_time
+                        ),
+
+                    "seconds_until":
+                        seconds_until(
+                            event_time,
+                            now,
+                        ),
+
+                    "category":
+                        "jovian_eclipse",
+
+                    "event_type":
+                        event_type,
+
+                    "description":
+                        description,
+                })
+
+    timeline.sort(
+        key=lambda event:
+            event["time"]["utc"]
+    )
+
+    # --------------------------------------------------------
+    # Next ordinary solar transition
+    # --------------------------------------------------------
+
+    next_solar = (
+        solar_events[0]
+        if solar_events
+        else None
+    )
+
+    # --------------------------------------------------------
+    # Eclipse summary
+    # --------------------------------------------------------
+
+    if eclipse_event is None:
+        eclipse_data = {
+            "found":
+                False,
+
+            "status":
+                None,
+
+            "active":
+                False,
+
+            "current_phase":
+                None,
+
+            "current_phase_label":
+                None,
+        }
+
+    else:
+        eclipse_active = (
+            eclipse_event["begin"]
+            <= now
+            <= eclipse_event["end"]
+        )
+
+        duration_seconds = int(
+            round(
+                (
+                    eclipse_event["end"]
+                    - eclipse_event["begin"]
+                ).total_seconds()
+            )
+        )
+
+        eclipse_data = {
+            "found":
+                True,
+
+            "status":
+                (
+                    "current"
+                    if eclipse_active
+                    else "upcoming"
+                ),
+
+            "active":
+                eclipse_active,
+
+            "current_phase":
+                machine_name(
+                    eclipse_phase
+                ),
+
+            "current_phase_label":
+                eclipse_phase,
+
+            "has_totality":
+                (
+                    eclipse_event["total_begin"]
+                    is not None
+                    and eclipse_event["total_end"]
+                    is not None
+                ),
+
+            "begin":
+                json_time(
+                    eclipse_event["begin"]
+                ),
+
+            "total_begin":
+                (
+                    json_time(
+                        eclipse_event[
+                            "total_begin"
+                        ]
+                    )
+                    if eclipse_event[
+                        "total_begin"
+                    ] is not None
+                    else None
+                ),
+
+            "maximum":
+                json_time(
+                    eclipse_event[
+                        "maximum"
+                    ]
+                ),
+
+            "total_end":
+                (
+                    json_time(
+                        eclipse_event[
+                            "total_end"
+                        ]
+                    )
+                    if eclipse_event[
+                        "total_end"
+                    ] is not None
+                    else None
+                ),
+
+            "end":
+                json_time(
+                    eclipse_event["end"]
+                ),
+
+            "seconds_until_begin":
+                seconds_until(
+                    eclipse_event["begin"],
+                    now,
+                ),
+
+            "seconds_until_maximum":
+                seconds_until(
+                    eclipse_event["maximum"],
+                    now,
+                ),
+
+            "seconds_until_end":
+                seconds_until(
+                    eclipse_event["end"],
+                    now,
+                ),
+
+            "remaining_seconds":
+                (
+                    seconds_until(
+                        eclipse_event["end"],
+                        now,
+                    )
+                    if eclipse_active
+                    else None
+                ),
+
+            "duration_seconds":
+                duration_seconds,
+
+            "minimum_separation_deg":
+                eclipse_event[
+                    "minimum_separation"
+                ],
+        }
+
+    observed_change = eclipse_light_change(
+        eclipse_event,
+        now,
+    )
+
+    return {
+        "schema_version":
+            JSON_SCHEMA_VERSION,
+
+        "iotime_version":
+            IOTIME_VERSION,
+
+        "mode":
+            "forecast",
+
+        "reference_kind":
+            (
+                "explicit"
+                if reference_time is not None
+                else "live"
+            ),
+
+        "reference_time":
+            json_time(
+                now
+            ),
+
+        "observer": {
+            "name":
+                NEXUS_NAME,
+
+            "body":
+                "Io",
+
+            "body_id":
+                IO_ID,
+
+            "latitude_deg":
+                NEXUS_LATITUDE,
+
+            "longitude_west_deg":
+                NEXUS_LONGITUDE_WEST,
+
+            "elevation_km":
+                NEXUS_ELEVATION_KM,
+        },
+
+        "natural_light": {
+            "observed_state":
+                machine_name(
+                    observed_label
+                ),
+
+            "observed_label":
+                observed_label,
+
+            "solar_state":
+                machine_name(
+                    solar_label
+                ),
+
+            "solar_label":
+                solar_label,
+
+            "next_observed_light_change":
+                observed_change,
+        },
+
+        "sun": {
+            "elevation_deg":
+                current_sun_el,
+
+            "trend":
+                sun_trend,
+
+            "next_solar_transition":
+                (
+                    solar_event_json(
+                        next_solar,
+                        now,
+                    )
+                    if next_solar is not None
+                    else None
+                ),
+        },
+
+        "jovian_sky": {
+            "primary":
+                "Jupiter",
+
+            "bodies":
+                json_bodies,
+        },
+
+        "timeline": {
+            "window_hours":
+                24,
+
+            "events":
+                timeline,
+        },
+
+        "eclipse":
+            eclipse_data,
+
+        "source":
+            "JPL Horizons",
+    }
+
+
+def show_nexus_forecast_json(reference_time=None):
+    """
+    Print the unified Nexus City forecast as JSON only.
+    """
+    data = build_nexus_forecast_json(
+        reference_time
+    )
+
+    json.dump(
+        data,
+        sys.stdout,
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    print()
+
+
+
 def show_nexus_forecast(reference_time=None):
     """
     Present the unified Nexus City astronomical forecast.
@@ -3816,12 +4411,6 @@ def main():
 
     try:
         if args.json:
-            if args.forecast:
-                parser.error(
-                    "--json currently supports every mode "
-                    "except --forecast."
-                )
-
             if args.next:
                 show_eclipse_json(
                     reference_time
@@ -3839,6 +4428,11 @@ def main():
 
             elif args.sun:
                 show_solar_forecast_json(
+                    reference_time
+                )
+
+            elif args.forecast:
+                show_nexus_forecast_json(
                     reference_time
                 )
 
