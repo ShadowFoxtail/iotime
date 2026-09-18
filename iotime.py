@@ -540,6 +540,26 @@ def json_time(moment):
 
 
 
+
+def seconds_until(event_time, reference_time):
+    """
+    Return the non-negative number of seconds from the
+    reference time until an event.
+    """
+    return max(
+        0,
+        int(
+            round(
+                (
+                    event_time
+                    - reference_time
+                ).total_seconds()
+            )
+        ),
+    )
+
+
+
 def get_sky(reference_time=None):
     now = (
         reference_time
@@ -2499,6 +2519,335 @@ def find_solar_events(hours=60, reference_time=None):
     )
 
 
+
+def solar_event_type(event):
+    """
+    Return a stable machine-readable type for a solar
+    threshold crossing.
+    """
+    key = (
+        float(event["threshold"]),
+        bool(event["rising"]),
+    )
+
+    event_types = {
+        (-18.0, True):
+            "astronomical_dawn_begin",
+
+        (-12.0, True):
+            "nautical_dawn_begin",
+
+        (-6.0, True):
+            "civil_dawn_begin",
+
+        (0.0, True):
+            "sunrise",
+
+        (0.0, False):
+            "sunset",
+
+        (-6.0, False):
+            "civil_twilight_end",
+
+        (-12.0, False):
+            "nautical_twilight_end",
+
+        (-18.0, False):
+            "astronomical_twilight_end",
+    }
+
+    return event_types.get(
+        key,
+        "solar_transition",
+    )
+
+
+def solar_event_json(event, reference_time):
+    """
+    Convert one solar threshold crossing into JSON-safe data.
+    """
+    return {
+        "time":
+            json_time(
+                event["time"]
+            ),
+
+        "seconds_until":
+            seconds_until(
+                event["time"],
+                reference_time,
+            ),
+
+        "event_type":
+            solar_event_type(
+                event
+            ),
+
+        "threshold_deg":
+            float(
+                event["threshold"]
+            ),
+
+        "rising":
+            bool(
+                event["rising"]
+            ),
+
+        "description":
+            event["description"],
+    }
+
+
+def eclipse_light_change(event, moment):
+    """
+    Return the next eclipse-driven observed-light change when
+    an eclipse is currently underway.
+    """
+    phase = eclipse_phase_at(
+        event,
+        moment,
+    )
+
+    if phase is None:
+        return None
+
+    if (
+        phase == "TOTAL JOVIAN ECLIPSE"
+        and event["total_end"] is not None
+    ):
+        event_time = event["total_end"]
+        event_type = "jovian_totality_end"
+        description = "Jovian totality ends"
+
+    elif (
+        event["total_begin"] is not None
+        and moment < event["total_begin"]
+    ):
+        event_time = event["total_begin"]
+        event_type = "jovian_totality_begin"
+        description = "Jovian totality begins"
+
+    else:
+        event_time = event["end"]
+        event_type = "jovian_eclipse_end"
+        description = "Jovian eclipse ends"
+
+    return {
+        "time":
+            json_time(
+                event_time
+            ),
+
+        "seconds_until":
+            seconds_until(
+                event_time,
+                moment,
+            ),
+
+        "event_type":
+            event_type,
+
+        "description":
+            description,
+    }
+
+
+def build_solar_forecast_json(reference_time=None):
+    """
+    Build machine-readable Iovian light-cycle data.
+    """
+    (
+        now,
+        current_el,
+        trend,
+        events,
+    ) = find_solar_events(
+        reference_time=reference_time
+    )
+
+    solar_label = solar_state(
+        current_el
+    )
+
+    eclipse_event = get_eclipse_event(
+        reference_time
+    )
+
+    eclipse_label = eclipse_phase_at(
+        eclipse_event,
+        now,
+    )
+
+    observed_label = (
+        eclipse_label
+        if eclipse_label is not None
+        else solar_label
+    )
+
+    next_solar = (
+        events[0]
+        if events
+        else None
+    )
+
+    next_sunrise = next(
+        (
+            event
+            for event in events
+            if event["description"] == "Sunrise"
+        ),
+        None,
+    )
+
+    next_sunset = next(
+        (
+            event
+            for event in events
+            if event["description"] == "Sunset"
+        ),
+        None,
+    )
+
+    observed_change = eclipse_light_change(
+        eclipse_event,
+        now,
+    )
+
+    return {
+        "schema_version":
+            JSON_SCHEMA_VERSION,
+
+        "iotime_version":
+            IOTIME_VERSION,
+
+        "mode":
+            "sun",
+
+        "reference_kind":
+            (
+                "explicit"
+                if reference_time is not None
+                else "live"
+            ),
+
+        "reference_time":
+            json_time(
+                now
+            ),
+
+        "natural_light": {
+            "observed_state":
+                machine_name(
+                    observed_label
+                ),
+
+            "observed_label":
+                observed_label,
+
+            "solar_state":
+                machine_name(
+                    solar_label
+                ),
+
+            "solar_label":
+                solar_label,
+        },
+
+        "sun": {
+            "elevation_deg":
+                current_el,
+
+            "trend":
+                trend,
+        },
+
+        "eclipse": {
+            "active":
+                eclipse_label is not None,
+
+            "phase":
+                machine_name(
+                    eclipse_label
+                ),
+
+            "label":
+                eclipse_label,
+
+            "next_observed_light_change":
+                observed_change,
+        },
+
+        "next_solar_transition":
+            (
+                solar_event_json(
+                    next_solar,
+                    now,
+                )
+                if next_solar is not None
+                else None
+            ),
+
+        "next_sunrise":
+            (
+                solar_event_json(
+                    next_sunrise,
+                    now,
+                )
+                if next_sunrise is not None
+                else None
+            ),
+
+        "next_sunset":
+            (
+                solar_event_json(
+                    next_sunset,
+                    now,
+                )
+                if next_sunset is not None
+                else None
+            ),
+
+        "solar_transitions": [
+            solar_event_json(
+                event,
+                now,
+            )
+            for event in events
+        ],
+
+        "forecast_window_hours":
+            60,
+
+        "sampling_resolution_minutes":
+            2,
+
+        "crossing_times_interpolated":
+            True,
+
+        "source":
+            "JPL Horizons",
+    }
+
+
+def show_solar_forecast_json(reference_time=None):
+    """
+    Print Iovian light-cycle data as JSON and nothing else.
+    """
+    data = build_solar_forecast_json(
+        reference_time
+    )
+
+    json.dump(
+        data,
+        sys.stdout,
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    print()
+
+
+
 def show_solar_forecast(reference_time=None):
     (
         now,
@@ -3261,14 +3610,14 @@ def main():
         if args.json:
             unsupported_json_mode = any((
                 args.next,
-                args.sun,
                 args.forecast,
             ))
 
             if unsupported_json_mode:
                 parser.error(
                     "--json currently supports the "
-                    "default snapshot, --sky, and --events."
+                    "default snapshot, --sky, --events, "
+                    "and --sun."
                 )
 
             if args.sky:
@@ -3278,6 +3627,11 @@ def main():
 
             elif args.events:
                 show_satellite_events_json(
+                    reference_time
+                )
+
+            elif args.sun:
+                show_solar_forecast_json(
                     reference_time
                 )
 
