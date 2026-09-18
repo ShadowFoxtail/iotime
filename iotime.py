@@ -683,7 +683,7 @@ def build_snapshot_json(reference_time=None):
                 else "live"
             ),
 
-        "time":
+        "reference_time":
             json_time(
                 sky["time"]
             ),
@@ -1773,7 +1773,7 @@ def build_jovian_sky_json(reference_time=None):
                 else "live"
             ),
 
-        "time":
+        "reference_time":
             json_time(
                 now
             ),
@@ -4460,12 +4460,25 @@ def main():
             show_current(reference_time)
 
     except Exception as error:
+        output = (
+            sys.stderr
+            if args.json
+            else sys.stdout
+        )
+
         print(
             "iotime: unable to retrieve "
-            "JPL Horizons data."
+            "JPL Horizons data.",
+            file=output,
         )
-        print()
-        print(error)
+        print(
+            file=output
+        )
+        print(
+            error,
+            file=output,
+        )
+
         sys.exit(1)
 
 
