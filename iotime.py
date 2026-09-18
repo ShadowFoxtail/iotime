@@ -509,9 +509,21 @@ def json_time(moment):
     Return the same instant in canonical NST and UTC forms.
 
     NST is numerically identical to UTC.
+
+    Round to the nearest second so tiny floating-point artifacts
+    from Julian-date conversion do not appear as :59 timestamps.
     """
     utc = moment.astimezone(
         timezone.utc
+    )
+
+    if utc.microsecond >= 500000:
+        utc += timedelta(
+            seconds=1
+        )
+
+    utc = utc.replace(
+        microsecond=0
     )
 
     return {
@@ -1464,7 +1476,7 @@ def build_jovian_sky_json(reference_time=None):
                 body["elevation"] >= 0,
 
             "visibility_state":
-                machine_name(
+                satellite_state_name(
                     status
                 ),
 
@@ -1842,6 +1854,115 @@ def describe_satellite_transition(name, old_state, new_state):
     )
 
 
+
+
+def satellite_state_name(state):
+    """
+    Return a stable machine-readable identifier for a
+    satellite visibility state.
+    """
+    states = {
+        "VISIBLE":
+            "visible",
+
+        "BELOW HORIZON":
+            "below_horizon",
+
+        "TRANSITING JUPITER":
+            "transiting_jupiter",
+
+        "OCCULTED BY JUPITER":
+            "occulted_by_jupiter",
+
+        "PARTIAL ECLIPSE":
+            "partial_eclipse",
+
+        "OCCULTED + PARTIAL ECLIPSE":
+            "occulted_partial_eclipse",
+
+        "IN JUPITER'S SHADOW":
+            "in_jupiter_shadow",
+
+        "OCCULTED + IN SHADOW":
+            "occulted_in_shadow",
+
+        "PRIMARY BODY":
+            "primary_body",
+    }
+
+    return states.get(
+        state,
+        machine_name(state),
+    )
+
+
+
+def satellite_event_type(old_state, new_state):
+    """
+    Convert a Galilean moon state transition into a stable
+    machine-readable event type.
+    """
+    if (
+        old_state == "BELOW HORIZON"
+        and new_state != "BELOW HORIZON"
+    ):
+        return "rise"
+
+    if (
+        old_state != "BELOW HORIZON"
+        and new_state == "BELOW HORIZON"
+    ):
+        return "set"
+
+    transitions = {
+        (
+            "VISIBLE",
+            "OCCULTED BY JUPITER",
+        ): "occultation_begin",
+
+        (
+            "OCCULTED BY JUPITER",
+            "VISIBLE",
+        ): "occultation_end",
+
+        (
+            "VISIBLE",
+            "TRANSITING JUPITER",
+        ): "transit_begin",
+
+        (
+            "TRANSITING JUPITER",
+            "VISIBLE",
+        ): "transit_end",
+
+        (
+            "VISIBLE",
+            "PARTIAL ECLIPSE",
+        ): "shadow_entry_begin",
+
+        (
+            "PARTIAL ECLIPSE",
+            "IN JUPITER'S SHADOW",
+        ): "shadow_total_begin",
+
+        (
+            "IN JUPITER'S SHADOW",
+            "PARTIAL ECLIPSE",
+        ): "shadow_total_end",
+
+        (
+            "PARTIAL ECLIPSE",
+            "VISIBLE",
+        ): "shadow_exit_end",
+    }
+
+    return transitions.get(
+        (old_state, new_state),
+        "state_transition",
+    )
+
+
+
 def _find_satellite_events_uncached(hours=48, reference_time=None):
     """
     Search the upcoming Jovian sky for state changes involving
@@ -1960,6 +2081,122 @@ def find_satellite_events(hours=48, reference_time=None):
     )
 
     return events
+
+
+
+def build_satellite_events_json(reference_time=None):
+    """
+    Build machine-readable Galilean moon event data.
+    """
+    now = (
+        reference_time
+        if reference_time is not None
+        else datetime.now(timezone.utc)
+    )
+
+    events = find_satellite_events(
+        reference_time=reference_time
+    )
+
+    json_events = []
+
+    for event in events:
+        old_state = event["old_state"]
+        new_state = event["new_state"]
+
+        json_events.append({
+            "time":
+                json_time(
+                    event["time"]
+                ),
+
+            "body":
+                event["body"],
+
+            "target_id":
+                GALILEAN_MOONS[
+                    event["body"]
+                ],
+
+            "event_type":
+                satellite_event_type(
+                    old_state,
+                    new_state,
+                ),
+
+            "old_state":
+                satellite_state_name(
+                    old_state
+                ),
+
+            "old_state_label":
+                old_state,
+
+            "new_state":
+                satellite_state_name(
+                    new_state
+                ),
+
+            "new_state_label":
+                new_state,
+
+            "description":
+                event["description"],
+        })
+
+    return {
+        "schema_version":
+            JSON_SCHEMA_VERSION,
+
+        "iotime_version":
+            IOTIME_VERSION,
+
+        "mode":
+            "events",
+
+        "reference_kind":
+            (
+                "explicit"
+                if reference_time is not None
+                else "live"
+            ),
+
+        "reference_time":
+            json_time(
+                now
+            ),
+
+        "forecast_window_hours":
+            48,
+
+        "sampling_resolution_minutes":
+            2,
+
+        "events":
+            json_events,
+
+        "source":
+            "JPL Horizons",
+    }
+
+
+def show_satellite_events_json(reference_time=None):
+    """
+    Print Galilean moon events as JSON and nothing else.
+    """
+    data = build_satellite_events_json(
+        reference_time
+    )
+
+    json.dump(
+        data,
+        sys.stdout,
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    print()
+
 
 
 def show_satellite_events(reference_time=None):
@@ -3024,7 +3261,6 @@ def main():
         if args.json:
             unsupported_json_mode = any((
                 args.next,
-                args.events,
                 args.sun,
                 args.forecast,
             ))
@@ -3032,11 +3268,16 @@ def main():
             if unsupported_json_mode:
                 parser.error(
                     "--json currently supports the "
-                    "default snapshot and --sky."
+                    "default snapshot, --sky, and --events."
                 )
 
             if args.sky:
                 show_jovian_sky_json(
+                    reference_time
+                )
+
+            elif args.events:
+                show_satellite_events_json(
                     reference_time
                 )
 
