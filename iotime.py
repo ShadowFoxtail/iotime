@@ -1390,6 +1390,214 @@ def print_eclipse_report(event, moment):
     )
 
 
+
+def build_eclipse_json(reference_time=None):
+    """
+    Build machine-readable data for the current or next
+    visible Jovian eclipse.
+    """
+    now = (
+        reference_time
+        if reference_time is not None
+        else datetime.now(timezone.utc)
+    )
+
+    event = get_eclipse_event(
+        reference_time
+    )
+
+    if event is None:
+        eclipse_data = {
+            "found":
+                False,
+
+            "status":
+                None,
+
+            "active":
+                False,
+
+            "current_phase":
+                None,
+
+            "current_phase_label":
+                None,
+        }
+
+    else:
+        active = (
+            event["begin"]
+            <= now
+            <= event["end"]
+        )
+
+        phase_label = eclipse_phase_at(
+            event,
+            now,
+        )
+
+        duration_seconds = int(
+            round(
+                (
+                    event["end"]
+                    - event["begin"]
+                ).total_seconds()
+            )
+        )
+
+        eclipse_data = {
+            "found":
+                True,
+
+            "status":
+                (
+                    "current"
+                    if active
+                    else "upcoming"
+                ),
+
+            "active":
+                active,
+
+            "current_phase":
+                machine_name(
+                    phase_label
+                ),
+
+            "current_phase_label":
+                phase_label,
+
+            "has_totality":
+                (
+                    event["total_begin"] is not None
+                    and event["total_end"] is not None
+                ),
+
+            "begin":
+                json_time(
+                    event["begin"]
+                ),
+
+            "total_begin":
+                (
+                    json_time(
+                        event["total_begin"]
+                    )
+                    if event["total_begin"] is not None
+                    else None
+                ),
+
+            "maximum":
+                json_time(
+                    event["maximum"]
+                ),
+
+            "total_end":
+                (
+                    json_time(
+                        event["total_end"]
+                    )
+                    if event["total_end"] is not None
+                    else None
+                ),
+
+            "end":
+                json_time(
+                    event["end"]
+                ),
+
+            "seconds_until_begin":
+                seconds_until(
+                    event["begin"],
+                    now,
+                ),
+
+            "seconds_until_maximum":
+                seconds_until(
+                    event["maximum"],
+                    now,
+                ),
+
+            "seconds_until_end":
+                seconds_until(
+                    event["end"],
+                    now,
+                ),
+
+            "remaining_seconds":
+                (
+                    seconds_until(
+                        event["end"],
+                        now,
+                    )
+                    if active
+                    else None
+                ),
+
+            "duration_seconds":
+                duration_seconds,
+
+            "minimum_separation_deg":
+                event[
+                    "minimum_separation"
+                ],
+        }
+
+    return {
+        "schema_version":
+            JSON_SCHEMA_VERSION,
+
+        "iotime_version":
+            IOTIME_VERSION,
+
+        "mode":
+            "next",
+
+        "reference_kind":
+            (
+                "explicit"
+                if reference_time is not None
+                else "live"
+            ),
+
+        "reference_time":
+            json_time(
+                now
+            ),
+
+        "eclipse":
+            eclipse_data,
+
+        "forecast_window_hours":
+            48,
+
+        "sampling_resolution_minutes":
+            1,
+
+        "source":
+            "JPL Horizons",
+    }
+
+
+def show_eclipse_json(reference_time=None):
+    """
+    Print current/next Jovian eclipse data as JSON only.
+    """
+    data = build_eclipse_json(
+        reference_time
+    )
+
+    json.dump(
+        data,
+        sys.stdout,
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    print()
+
+
+
 def show_next_eclipse(reference_time=None):
     now = (
         reference_time
@@ -3608,19 +3816,18 @@ def main():
 
     try:
         if args.json:
-            unsupported_json_mode = any((
-                args.next,
-                args.forecast,
-            ))
-
-            if unsupported_json_mode:
+            if args.forecast:
                 parser.error(
-                    "--json currently supports the "
-                    "default snapshot, --sky, --events, "
-                    "and --sun."
+                    "--json currently supports every mode "
+                    "except --forecast."
                 )
 
-            if args.sky:
+            if args.next:
+                show_eclipse_json(
+                    reference_time
+                )
+
+            elif args.sky:
                 show_jovian_sky_json(
                     reference_time
                 )
