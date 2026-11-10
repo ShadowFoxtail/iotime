@@ -1,4 +1,4 @@
- #!/usr/bin/env python3
+#!/usr/bin/env python3
 
 import argparse
 import json
@@ -38,7 +38,7 @@ GALILEAN_MOONS = {
 # iotime application settings
 # ---------------------------------------------------------------------
 
-IOTIME_VERSION = "1.2.0"
+IOTIME_VERSION = "1.2.1"
 JSON_SCHEMA_VERSION = 1
 
 CACHE_DIR = (
@@ -573,6 +573,23 @@ def seconds_until(event_time, reference_time):
 
 
 
+def horizons_two_sample_epochs(moment, minutes=1):
+    """Build a UTC calendar range containing two samples, at the
+    requested time and ``minutes`` later.
+
+    Horizons currently fails for discrete TLIST epochs but accepts
+    START_TIME / STOP_TIME / STEP_SIZE ranges. This preserves the
+    program's second-level timestamps without changing its astronomy.
+    """
+    return {
+        "start": moment.strftime("%Y-%m-%d %H:%M:%S"),
+        "stop": (moment + timedelta(minutes=minutes)).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        ),
+        "step": f"{minutes}m",
+    }
+
+
 def get_sky(reference_time=None):
     now = (
         reference_time
@@ -580,15 +597,10 @@ def get_sky(reference_time=None):
         else datetime.now(timezone.utc)
     )
 
-    later = now + timedelta(minutes=30)
-
-    now_jd = Time(now).jd
-    later_jd = Time(later).jd
-
     sun_query = Horizons(
         id=str(SUN_ID),
         location=NEXUS_LOCATION,
-        epochs=now_jd,
+        epochs=horizons_two_sample_epochs(now),
     )
 
     sun = sun_query.ephemerides(
@@ -598,7 +610,7 @@ def get_sky(reference_time=None):
     jupiter_query = Horizons(
         id=str(JUPITER_ID),
         location=NEXUS_LOCATION,
-        epochs=[now_jd, later_jd],
+        epochs=horizons_two_sample_epochs(now, minutes=30),
     )
 
     jupiter = jupiter_query.ephemerides(
@@ -820,7 +832,7 @@ def get_jovian_sky(reference_time=None):
         if reference_time is not None
         else datetime.now(timezone.utc)
     )
-    now_jd = Time(now).jd
+    epochs = horizons_two_sample_epochs(now)
 
     bodies = []
 
@@ -828,7 +840,7 @@ def get_jovian_sky(reference_time=None):
     query = Horizons(
         id=str(JUPITER_ID),
         location=NEXUS_LOCATION,
-        epochs=now_jd,
+        epochs=epochs,
     )
 
     row = query.ephemerides(
@@ -851,7 +863,7 @@ def get_jovian_sky(reference_time=None):
         query = Horizons(
             id=str(target_id),
             location=NEXUS_LOCATION,
-            epochs=now_jd,
+            epochs=epochs,
         )
 
         # 4  = azimuth/elevation

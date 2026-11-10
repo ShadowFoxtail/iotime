@@ -225,8 +225,21 @@ iotime --version
 Current release:
 
 ```text
-iotime 1.2.0
+iotime 1.2.1
 ```
+
+## Version 1.2.1 — Horizons compatibility
+
+Version 1.2.1 restores compatibility with JPL Horizons after discrete-epoch observation requests began returning invalid ephemeris results.
+
+Current Sun, Jupiter, and Galilean moon observations now use calendar-date range queries instead of individual Julian Date requests.
+
+This maintenance release:
+
+- Restores normal sky observations and unified forecasts.
+- Preserves second-level timestamp precision.
+- Retains all existing command-line options and JSON interfaces.
+- Makes no changes to Nexus City's coordinates or astronomical calculations.
 
 ## Astronomy notes
 
